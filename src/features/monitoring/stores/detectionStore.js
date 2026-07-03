@@ -4,6 +4,11 @@ const MAX_PER_CAMERA = 6;
 const MAX_FEED = 12;
 const AUTO_DISMISS_MS = 8000;
 const MIN_LIVE_FRAME_INTERVAL_MS = 50;
+// Retencion de la ultima deteccion: un frame aislado donde el detector
+// pierde la cara (persona lejos, blur de movimiento) NO debe borrar los
+// boxes al instante — eso produce parpadeo. Los frames vacios dentro de
+// esta ventana se ignoran; si lo vacio persiste, el overlay se limpia.
+const HOLD_LAST_DETECTION_MS = 1000;
 
 const isValid = (detection) => detection && (detection._id || detection.id);
 
@@ -117,6 +122,16 @@ export const useDetectionStore = create((set, get) => ({
     if (prev && now - prev._receivedAt < MIN_LIVE_FRAME_INTERVAL_MS) return;
 
     const students = Array.isArray(payload.students) ? payload.students.map(normalizeStudent) : [];
+    // Anti-parpadeo: frame vacio reciente tras una deteccion valida se
+    // ignora (la transicion CSS sigue interpolando hacia la ultima
+    // posicion conocida). Ver HOLD_LAST_DETECTION_MS.
+    if (
+      students.length === 0 &&
+      prev?.students?.length > 0 &&
+      now - prev._receivedAt < HOLD_LAST_DETECTION_MS
+    ) {
+      return;
+    }
     const videoSize =
       payload.videoSize || students.find((s) => s.videoSize)?.videoSize || prev?.videoSize || null;
 

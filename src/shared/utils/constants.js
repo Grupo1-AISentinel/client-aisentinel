@@ -50,4 +50,5 @@ export const SOCKET_EVENTS = {
   PYIMAGE_STATUS: 'pyimage:status',
   NOTIFICATION_NEW: 'notification:new',
   SUBSCRIBE_CAMERAS: 'subscribe_cameras',
+  CAMERAS_CHANGED: 'cameras:changed',
 };

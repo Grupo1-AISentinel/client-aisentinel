@@ -46,6 +46,12 @@ class SocketService {
       this.connecting = false;
       this.socket.emit(SOCKET_EVENTS.SUBSCRIBE_CAMERAS);
     });
+    // detection:alert se emite a rooms camera:<id>; si se registra una
+    // cámara nueva después de conectar, hay que re-suscribirse para
+    // unirse a su room (si no, sus alertas nunca llegan a este socket).
+    this.socket.on(SOCKET_EVENTS.CAMERAS_CHANGED, () => {
+      this.socket.emit(SOCKET_EVENTS.SUBSCRIBE_CAMERAS);
+    });
     this.socket.on('disconnect', (reason) => {
       console.warn('[socket] disconnected:', reason);
       this.connecting = false;

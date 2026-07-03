@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { useDetectionStore } from '../stores/detectionStore.js';
 import { scaleBox, scaleRect } from '../utils/scaleBox.js';
 import {
@@ -19,11 +19,23 @@ import {
 // porque seria muy caro pintar pixel-a-pixel en SVG sobre un <video>.
 // Solo el bbox con su badge.
 
+// Duracion de la interpolacion de posicion. Debe aproximarse a la
+// cadencia de analisis (FRAME_INTERVAL_MS del uploader) para que el
+// box se deslice de forma continua entre una deteccion y la siguiente
+// en vez de teletransportarse.
+const TRANSITION_MS = 170;
+// Sin detecciones frescas en este lapso, el overlay se desvanece: un
+// box dibujado donde la persona estuvo hace segundos es peor que
+// ninguno (el uploader pudo entrar en backoff o la escena cambio).
+const STALE_MS = 3000;
+
 // Etiqueta compacta "Nombre + badge" sobre el bbox de la cara.
 // El badge es un rect pequeno con texto corto (SI/?/NO) al lado del nombre.
 // Ambos comparten un fondo con outline negro para legibilidad sobre
 // cualquier frame del video.
-const FaceLabel = ({ name, badgeText, x, y, color, viewW }) => {
+// Coordenadas RELATIVAS al grupo del bbox (que se posiciona con un
+// transform animado); faceY absoluto solo decide el clamp superior.
+const FaceLabel = ({ name, badgeText, faceY, color, viewW }) => {
   const fontSize = Math.max(10, viewW * 0.011);
   // Ancho del nombre: aprox 0.55 * fontsize por caracter mono. 8 chars
   // minimo para que el badge tenga espacio.
@@ -31,7 +43,9 @@ const FaceLabel = ({ name, badgeText, x, y, color, viewW }) => {
   const badgeW = Math.max(28, badgeText.length * fontSize * 0.7 + 14);
   const totalW = nameW + badgeW + 6;
   const labelH = fontSize * 1.7;
-  const labelY = Math.max(0, y - labelH - 4);
+  const x = 0;
+  // Equivale al clamp absoluto Math.max(0, faceY - labelH - 4) de antes.
+  const labelY = Math.max(-faceY, -(labelH + 4));
   return (
     <g>
       {/* Fondo del label completo (nombre + badge) */}
@@ -101,8 +115,21 @@ const LiveBoundingBoxes = ({ cameraId, renderSize, videoSize }) => {
   // FIX: pinto directo del liveFrame (estudiantes de pyimage) sin pasar
   // por el tracker Kalman. Razon: el tracker introducia ruido que ponia
   // los bboxes en el centro cuando la velocidad se desvanecía. Mejor
-  // pintar lo que pyimage detecta, sin filtro intermedio.
-  const students = useDetectionStore((s) => s.liveDetections[cameraId]?.students) || [];
+  // pintar lo que pyimage detecta, sin filtro intermedio. La fluidez la
+  // aporta la transicion CSS del transform de cada grupo (TRANSITION_MS).
+  const liveFrame = useDetectionStore((s) => s.liveDetections[cameraId]);
+  const students = liveFrame?.students || [];
+  const receivedAt = liveFrame?._receivedAt || 0;
+
+  // Tick de 1s solo para evaluar caducidad; el resto de renders los
+  // dispara el propio store con cada live_frame.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!students.length) return undefined;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [students.length]);
+  const isStale = receivedAt > 0 && now - receivedAt > STALE_MS;
 
   if (!videoSize) return null;
   const safeRenderSize = renderSize?.width > 0 ? renderSize : { width: 640, height: 480 };
@@ -120,6 +147,7 @@ const LiveBoundingBoxes = ({ cameraId, renderSize, videoSize }) => {
       className="absolute inset-0 w-full h-full pointer-events-none"
       viewBox={`0 0 ${viewW} ${viewH}`}
       preserveAspectRatio="none"
+      style={{ opacity: isStale ? 0 : 1, transition: 'opacity 600ms ease-out' }}
     >
       {students.map((student, idx) => {
         const state = classifyStudent(student);
@@ -133,9 +161,16 @@ const LiveBoundingBoxes = ({ cameraId, renderSize, videoSize }) => {
         // deteccion fallo. Pintamos un cuadrado dashed centrado para
         // mantener el indicador visible, sin el texto literal de debug
         // que tenia la version anterior.
+        const hasFiniteFace =
+          scaledFace &&
+          Number.isFinite(scaledFace.x) &&
+          Number.isFinite(scaledFace.y) &&
+          Number.isFinite(scaledFace.width) &&
+          Number.isFinite(scaledFace.height);
         const isDegenerateFace =
           scaledFace &&
-          ((scaledFace.width >= viewW - 4 && scaledFace.height >= viewH - 4) ||
+          (!hasFiniteFace ||
+            (scaledFace.width >= viewW - 4 && scaledFace.height >= viewH - 4) ||
             scaledFace.width < 10 ||
             scaledFace.height < 10);
         const fallbackSize = Math.min(120, viewW * 0.25, viewH * 0.25);
@@ -147,54 +182,45 @@ const LiveBoundingBoxes = ({ cameraId, renderSize, videoSize }) => {
         const badgeText = STATE_BADGE_TEXT[state];
         const key = `${student.studentCard || 'u'}-${idx}`;
 
+        // Posicion del grupo del bbox facial. El grupo entero (rect +
+        // label) se mueve con transition sobre transform: entre una
+        // deteccion y la siguiente el box se DESLIZA hacia la nueva
+        // posicion en vez de saltar — la clave de la fluidez percibida.
+        const faceX = useFallback ? fallbackX : scaledFace.x;
+        const faceY = useFallback ? fallbackY : scaledFace.y;
+        const faceW = useFallback ? fallbackSize : scaledFace.width;
+        const faceH = useFallback ? fallbackSize : scaledFace.height;
+        const glide = {
+          transform: `translate(${faceX}px, ${faceY}px)`,
+          transition: `transform ${TRANSITION_MS}ms linear`,
+        };
+
         return (
           <g key={key}>
-            {useFallback ? (
-              <>
-                <rect
-                  x={fallbackX}
-                  y={fallbackY}
-                  width={fallbackSize}
-                  height={fallbackSize}
-                  fill="none"
-                  stroke={color}
-                  strokeWidth={faceStrokeWidth}
-                  strokeDasharray="6 4"
-                  rx="6"
-                  style={{ filter: `drop-shadow(0 0 6px ${color})` }}
-                />
-                <FaceLabel
-                  name={name}
-                  badgeText={badgeText}
-                  x={fallbackX}
-                  y={fallbackY}
-                  color={color}
-                  viewW={viewW}
-                />
-              </>
-            ) : (
-              <>
-                <rect
-                  x={scaledFace.x}
-                  y={scaledFace.y}
-                  width={scaledFace.width}
-                  height={scaledFace.height}
-                  fill="none"
-                  stroke={color}
-                  strokeWidth={faceStrokeWidth}
-                  rx={Math.max(4, viewW / 240)}
-                  style={{ filter: `drop-shadow(0 0 4px ${color})` }}
-                />
-                <FaceLabel
-                  name={name}
-                  badgeText={badgeText}
-                  x={scaledFace.x}
-                  y={scaledFace.y}
-                  color={color}
-                  viewW={viewW}
-                />
-              </>
-            )}
+            <g style={glide}>
+              <rect
+                x={0}
+                y={0}
+                width={faceW}
+                height={faceH}
+                fill="none"
+                stroke={color}
+                strokeWidth={faceStrokeWidth}
+                strokeDasharray={useFallback ? '6 4' : undefined}
+                rx={useFallback ? 6 : Math.max(4, viewW / 240)}
+                style={{
+                  filter: `drop-shadow(0 0 ${useFallback ? 6 : 4}px ${color})`,
+                  transition: `width ${TRANSITION_MS}ms linear, height ${TRANSITION_MS}ms linear`,
+                }}
+              />
+              <FaceLabel
+                name={name}
+                badgeText={badgeText}
+                faceY={faceY}
+                color={color}
+                viewW={viewW}
+              />
+            </g>
 
             {/* Bboxes de ropa: cada prenda se dibuja con su color
                 semantico (verde si valida, rojo si no). Mismo patron
@@ -202,14 +228,27 @@ const LiveBoundingBoxes = ({ cameraId, renderSize, videoSize }) => {
             {(student.clothingBoxes || []).map((cb, i) => {
               if (!cb.box) return null;
               const scaled = scaleRect(cb.box, videoSize, safeRenderSize);
-              if (!scaled) return null;
+              if (
+                !scaled ||
+                !Number.isFinite(scaled.x) ||
+                !Number.isFinite(scaled.y) ||
+                !Number.isFinite(scaled.width) ||
+                !Number.isFinite(scaled.height)
+              )
+                return null;
               const cbColor = clothingStroke(cb.valid);
               const fontSize = Math.max(8, viewW * 0.0085);
               return (
-                <g key={`cl-${idx}-${i}`}>
+                <g
+                  key={`cl-${idx}-${i}`}
+                  style={{
+                    transform: `translate(${scaled.x}px, ${scaled.y}px)`,
+                    transition: `transform ${TRANSITION_MS}ms linear`,
+                  }}
+                >
                   <rect
-                    x={scaled.x}
-                    y={scaled.y}
+                    x={0}
+                    y={0}
                     width={scaled.width}
                     height={scaled.height}
                     fill="none"
@@ -218,11 +257,14 @@ const LiveBoundingBoxes = ({ cameraId, renderSize, videoSize }) => {
                     strokeDasharray={`${viewW * 0.012} ${viewW * 0.006}`}
                     rx={3}
                     opacity="0.9"
-                    style={{ filter: `drop-shadow(0 0 3px ${cbColor})` }}
+                    style={{
+                      filter: `drop-shadow(0 0 3px ${cbColor})`,
+                      transition: `width ${TRANSITION_MS}ms linear, height ${TRANSITION_MS}ms linear`,
+                    }}
                   />
                   <text
-                    x={scaled.x}
-                    y={scaled.y + scaled.height + fontSize * 1.3}
+                    x={0}
+                    y={scaled.height + fontSize * 1.3}
                     fill={cbColor}
                     fontSize={fontSize}
                     fontFamily="monospace"

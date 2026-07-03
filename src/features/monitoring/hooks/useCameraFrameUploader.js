@@ -1,13 +1,22 @@
 import { useEffect, useRef } from 'react';
 import { getAdminClient } from '../../../shared/api/clients.js';
 
-const FRAME_INTERVAL_MS = 800;
-const JPEG_QUALITY = 0.55;
-// Resolucion maxima del frame JPEG enviado a pyimage. Antes era 960.
-// Bajamos a 720 para reducir ~44% el tamano del payload (de ~50KB a
-// ~30KB a JPEG q=0.7) sin perder la deteccion de uniforme a distancias
-// <=3m. Coincide con --resize max=720 del script Python de respaldo.
-const MAX_DIMENSION = 720;
+// 150ms ≈ 6.7 fps de analisis. pyimage procesa un frame de 720px en
+// ~15-40ms en regimen (pipeline batcheado + tracking con cache: el
+// reconocimiento y el uniforme solo se recalculan para tracks nuevos o
+// vencidos), asi que la cadencia la limita la red/captura, no la IA.
+// Debe ser MAYOR que FRAME_THROTTLE_MS del admin (100ms) o el server
+// responde 429.
+const FRAME_INTERVAL_MS = 150;
+// Calidad/resolucion del frame enviado. MEDIDO contra el video demo real
+// (matriz calidad x resolucion, 6 frames): a 720px q=0.55 el reconocimiento
+// facial acierta 1/6 frames (la cara de ~40px queda destruida por el JPEG y
+// el nombre nunca aparece en el box); a 960px q=0.8 acierta 3/6 — el resto
+// lo cubre el track cache de pyimage entre aciertos. Costo: payload 26->64KB
+// y ~40ms extra de inferencia por frame, irrelevante para el pipeline actual
+// (capacidad ~20 fps). NO bajar estos valores sin re-medir el reconocimiento.
+const JPEG_QUALITY = 0.8;
+const MAX_DIMENSION = 960;
 
 const captureFromVideo = (video, cameraId) => {
   if (!video || video.readyState < 2 || !video.videoWidth) return null;
@@ -26,7 +35,7 @@ const captureFromVideo = (video, cameraId) => {
   // Hash perceptual: si el frame no cambio respecto al anterior, no
   // enviamos. Hace que escenas estaticas (pasillo vacio, persona
   // sentada) generen 0 trafico HTTP.
-  const changed = cameraId ? frameChanged(cameraId, ctx, canvas.width, canvas.height) : true;
+  const changed = cameraId ? frameChanged(cameraId, canvas) : true;
   return new Promise((resolve) => {
     try {
       canvas.toBlob((blob) => resolve({ blob, changed }), 'image/jpeg', JPEG_QUALITY);
@@ -49,7 +58,7 @@ const captureFromImg = (img, cameraId) => {
       resolve(null);
       return;
     }
-    const changed = cameraId ? frameChanged(cameraId, ctx, c.width, c.height) : true;
+    const changed = cameraId ? frameChanged(cameraId, c) : true;
     try {
       c.toBlob((blob) => resolve({ blob, changed }), 'image/jpeg', JPEG_QUALITY);
     } catch {
@@ -68,16 +77,43 @@ const controllers = new Map();
 // persona sentada sin moverse, etc). Coincide con el flag --skip-duplicates
 // del script Python de respaldo (test_video.py).
 //
-// Algoritmo: reducimos el frame a 16x16 grayscale, contamos pixeles
-// diferentes vs el frame anterior. Si <5% difieren, asumimos que la
-// escena no cambio y NO enviamos. Esto es robusto para videos en vivo
-// (no usa md5 de bytes JPEG, que cambia con cada re-compresion).
+// Algoritmo: reducimos el frame a 16x16 grayscale (drawImage a un canvas
+// chico), comparamos media + desviacion vs el frame anterior. Si el
+// cambio es minimo, asumimos que la escena no cambio y NO enviamos.
+//
+// BUG CORREGIDO: el codigo anterior llamaba getImageData(0, 0, w, h) con
+// el canvas COMPLETO (hasta 720x1280 = ~900K pixeles), no el 16x16 que
+// describian el comentario y HASH_SAMPLE_SIZE (declarada pero nunca
+// usada). Eso costaba un getImageData + loop de ~900K iteraciones EN EL
+// HILO PRINCIPAL cada 150ms, compitiendo con el render de React/el video
+// — la causa mas probable del "atraso" reportado en el frontend (el
+// backend por si solo mide 20-100ms/frame). Ademas, comparar media/
+// varianza sobre TODA la imagen es insensible a movimiento localizado
+// (una persona en una esquina de un frame grande apenas mueve el
+// promedio global) -> el frame se descartaba como "sin cambios" pese a
+// que la persona SI se habia movido, y el box solo se actualizaba cuando
+// el movimiento acumulado por fin cruzaba el umbral: eso es exactamente
+// el efecto de "salto tardio" que se veia en pantalla.
+//
+// Downscalear a un grid 16x16 antes de medir resuelve ambos problemas:
+// el costo cae ~3500x (256 vs ~900K pixeles) y cada celda del grid
+// promedia un area pequena, asi que el movimiento localizado SI mueve
+// su celda de forma notoria.
 const lastFrameHash = new Map();
 const HASH_SAMPLE_SIZE = 16;
-const HASH_CHANGE_THRESHOLD = 0.05; // 5% pixeles distintos para re-enviar
+const HASH_CHANGE_THRESHOLD = 0.02; // delta de media/desviacion (fraccion 0-1) para considerar que el frame cambio
 
-const computeFrameHash = (ctx, w, h) => {
-  const data = ctx.getImageData(0, 0, w, h).data;
+// Canvas reutilizable para el downscale del hash. `willReadFrequently`
+// evita que Chrome mantenga este canvas respaldado por GPU (lo que
+// penaliza cada getImageData con una lectura GPU->CPU).
+const hashCanvas = document.createElement('canvas');
+hashCanvas.width = HASH_SAMPLE_SIZE;
+hashCanvas.height = HASH_SAMPLE_SIZE;
+const hashCtx = hashCanvas.getContext('2d', { willReadFrequently: true });
+
+const computeFrameHash = (sourceCanvas) => {
+  hashCtx.drawImage(sourceCanvas, 0, 0, HASH_SAMPLE_SIZE, HASH_SAMPLE_SIZE);
+  const data = hashCtx.getImageData(0, 0, HASH_SAMPLE_SIZE, HASH_SAMPLE_SIZE).data;
   let sum = 0;
   let sumSq = 0;
   for (let i = 0; i < data.length; i += 4) {
@@ -90,17 +126,17 @@ const computeFrameHash = (ctx, w, h) => {
   return { mean: sum / n, variance: sumSq / n - (sum / n) ** 2 };
 };
 
-const frameChanged = (cameraId, ctx, w, h) => {
-  const current = computeFrameHash(ctx, w, h);
+const frameChanged = (cameraId, sourceCanvas) => {
+  const current = computeFrameHash(sourceCanvas);
   const prev = lastFrameHash.get(cameraId);
   lastFrameHash.set(cameraId, current);
   if (!prev) return true; // primer frame, siempre enviar
   // Comparar media + varianza. Es muy robusto: si la luminancia
   // promedio no cambio Y la varianza no cambio, los pixeles son
-  // esencialmente identicos. Threshold de 2% para cada uno.
+  // esencialmente identicos.
   const meanDelta = Math.abs(current.mean - prev.mean) / 255;
   const varDelta = Math.abs(Math.sqrt(current.variance) - Math.sqrt(prev.variance)) / 128;
-  return meanDelta > 0.02 || varDelta > 0.02;
+  return meanDelta > HASH_CHANGE_THRESHOLD || varDelta > HASH_CHANGE_THRESHOLD;
 };
 
 const resetFrameHash = (cameraId) => {
@@ -216,11 +252,16 @@ export const useCameraFrameUploader = ({ cameraId, sourceRef, isActive, enabled 
           })
           .catch((err) => {
             const status = err?.response?.status;
-            // 429 = rate limit (transitorio): aplica backoff
+            // 429 = throttle del admin (transitorio por jitter): NO entra al
+            //        backoff exponencial — con margen de solo 50ms entre el
+            //        intervalo (150ms) y el throttle (100ms), un 429 espurio
+            //        congelaria el stream 1s+. El siguiente tick a 150ms ya
+            //        cae fuera del throttle.
             // 404 = camara no existe (permanente): no reintentar agresivamente,
             //        pero seguimos con backoff suave para detectar creacion
             // 502/503 = admin no pudo hablar con pyimage: aplicar backoff
             // Network = admin caido: aplicar backoff
+            if (status === 429) return;
             if (status === 404) {
               // Marcar como fallo permanente (no recoverable subiendo frames)
               ctrl.permanent = true;

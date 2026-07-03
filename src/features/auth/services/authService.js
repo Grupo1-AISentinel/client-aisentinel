@@ -128,7 +128,15 @@ export const authService = {
     const token = useAuthStore.getState().token;
     if (!token || isJwtExpired(token)) return null;
     try {
-      return await authApi.heartbeat();
+      const response = await authApi.heartbeat();
+      // El heartbeat reemite un token fresco (ver server-auth heartbeat
+      // controller): guardarlo extiende la sesion mientras el usuario siga
+      // activo, sin lo cual el token original expira a los 30 min pese a
+      // que la pagina (p.ej. Monitoreo) siga en uso.
+      if (response?.token) {
+        useAuthStore.getState().renewToken(response.token, response.expiresAt);
+      }
+      return response;
     } catch {
       return null;
     }
