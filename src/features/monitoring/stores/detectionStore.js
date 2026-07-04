@@ -42,6 +42,7 @@ export const useDetectionStore = create((set, get) => ({
   detectionsByCamera: {},
   feed: [],
   liveDetections: {},
+  liveDetectionsHistory: {},
   pyimageConnected: true,
 
   addDetection: (detection) => {
@@ -118,6 +119,16 @@ export const useDetectionStore = create((set, get) => ({
   setLiveFrame: (cameraId, payload) => {
     if (!cameraId || !payload) return;
     const now = Date.now();
+
+    // Descartar si el frame es muy antiguo (RTT > 400ms) para evitar saltos o retrasos perceptibles
+    if (payload.frameTimestamp) {
+      const age = now - payload.frameTimestamp;
+      if (age > 400) {
+        console.warn(`[detectionStore] Descartando frame antiguo de la cámara ${cameraId}: ${age}ms de retraso`);
+        return;
+      }
+    }
+
     const prev = get().liveDetections[cameraId];
     if (prev && now - prev._receivedAt < MIN_LIVE_FRAME_INTERVAL_MS) return;
 
@@ -135,17 +146,30 @@ export const useDetectionStore = create((set, get) => ({
     const videoSize =
       payload.videoSize || students.find((s) => s.videoSize)?.videoSize || prev?.videoSize || null;
 
-    set((state) => ({
-      liveDetections: {
-        ...state.liveDetections,
-        [cameraId]: {
-          students,
-          videoSize,
-          timestamp: payload.timestamp || new Date(now).toISOString(),
-          _receivedAt: now,
+    const newFrame = {
+      students,
+      videoSize,
+      timestamp: payload.timestamp || new Date(now).toISOString(),
+      _receivedAt: now,
+      frameId: payload.frameId || null,
+      frameTimestamp: payload.frameTimestamp || null,
+      playheadTime: payload.playheadTime ?? null,
+    };
+
+    set((state) => {
+      const oldHistory = state.liveDetectionsHistory[cameraId] || [];
+      const newHistory = [newFrame, ...oldHistory].slice(0, 15);
+      return {
+        liveDetections: {
+          ...state.liveDetections,
+          [cameraId]: newFrame,
         },
-      },
-    }));
+        liveDetectionsHistory: {
+          ...state.liveDetectionsHistory,
+          [cameraId]: newHistory,
+        },
+      };
+    });
   },
 
   clearLiveDetection: (cameraId) => {
@@ -153,11 +177,13 @@ export const useDetectionStore = create((set, get) => ({
       if (!state.liveDetections[cameraId]) return state;
       const next = { ...state.liveDetections };
       delete next[cameraId];
-      return { liveDetections: next };
+      const nextHist = { ...state.liveDetectionsHistory };
+      delete nextHist[cameraId];
+      return { liveDetections: next, liveDetectionsHistory: nextHist };
     });
   },
 
-  clearAllLiveDetections: () => set({ liveDetections: {} }),
+  clearAllLiveDetections: () => set({ liveDetections: {}, liveDetectionsHistory: {} }),
 
   setPyimageConnected: (connected) => set({ pyimageConnected: Boolean(connected) }),
 }));

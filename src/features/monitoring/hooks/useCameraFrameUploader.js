@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { getAdminClient } from '../../../shared/api/clients.js';
+import { useDetectionStore } from '../stores/detectionStore.js';
 
 // 150ms ≈ 6.7 fps de analisis. pyimage procesa un frame de 720px en
 // ~15-40ms en regimen (pipeline batcheado + tracking con cache: el
@@ -7,7 +8,15 @@ import { getAdminClient } from '../../../shared/api/clients.js';
 // vencidos), asi que la cadencia la limita la red/captura, no la IA.
 // Debe ser MAYOR que FRAME_THROTTLE_MS del admin (100ms) o el server
 // responde 429.
-const FRAME_INTERVAL_MS = 150;
+// 80ms ≈ 12.5 fps de analisis. MEDIDO en vivo: pyimage procesa un frame de
+// produccion en 15-55ms (desconocido 15-45ms; alumno con validacion de
+// uniforme ~55ms) y el round-trip web completo (captura+encode ~20ms +
+// browser->admin->pyimage->admin->browser) es ~56-80ms, con la GPU al
+// 37-40% (hay margen). A 80ms el veredicto de uniforme se refresca ~25% mas
+// seguido que a 100ms sin acumular cola (el flag inFlight salta solo en el
+// pico ocasional y se autorregula). Debe ser MAYOR que FRAME_THROTTLE_MS del
+// admin (45ms) para dejar 35ms de margen al jitter del timer sin 429.
+const FRAME_INTERVAL_MS = 80;
 // Calidad/resolucion del frame enviado. MEDIDO contra el video demo real
 // (matriz calidad x resolucion, 6 frames): a 720px q=0.55 el reconocimiento
 // facial acierta 1/6 frames (la cara de ~40px queda destruida por el JPEG y
@@ -101,7 +110,17 @@ const controllers = new Map();
 // su celda de forma notoria.
 const lastFrameHash = new Map();
 const HASH_SAMPLE_SIZE = 16;
-const HASH_CHANGE_THRESHOLD = 0.02; // delta de media/desviacion (fraccion 0-1) para considerar que el frame cambio
+// Delta de media/desviacion (fraccion 0-1) para considerar que el frame cambio.
+// MEDIDO sobre el video demo en movimiento (40 ticks/3.2s del hash 16x16 real):
+// con 0.02 solo 2/40 frames superaban el umbral -> se subia ~5% del movimiento
+// y el box quedaba congelado ("no se mueve acorde al estudiante"). La persona
+// ocupa ~1/4 del frame, asi que moverse cambia POCO la media/varianza GLOBAL
+// del grid: el grueso del movimiento real cae en 0.005-0.01. 0.006 captura
+// ~15/40 (~37% -> ~4-6 fps de subida durante movimiento) y sigue descartando
+// escenas estaticas (el piso de ruido de video/JPEG queda por debajo). Bajar
+// esto es lo que hace que el box siga a la persona con densidad suficiente
+// para que el glide del overlay se vea continuo, como el motor local.
+const HASH_CHANGE_THRESHOLD = 0.006;
 
 // Canvas reutilizable para el downscale del hash. `willReadFrequently`
 // evita que Chrome mantenga este canvas respaldado por GPU (lo que
@@ -146,7 +165,7 @@ const resetFrameHash = (cameraId) => {
 const acquireController = (cameraId) => {
   const old = controllers.get(cameraId);
   if (old) old.active = false;
-  const ctrl = { active: true, intervalId: null, inFlight: false, lastSent: 0 };
+  const ctrl = { active: true, intervalId: null, inFlight: false, lastSent: 0, frameIdCounter: 0 };
   controllers.set(cameraId, ctrl);
   return ctrl;
 };
@@ -236,27 +255,55 @@ export const useCameraFrameUploader = ({ cameraId, sourceRef, isActive, enabled 
         }
         const blob = capture.blob;
         if (!blob) return;
+        
+        const frameTimestamp = Date.now();
+        ctrl.frameIdCounter = (ctrl.frameIdCounter || 0) + 1;
+        const currentFrameId = ctrl.frameIdCounter;
+        const playheadTime = isVideo ? node.currentTime : null;
+
         // Garantizar mimetype image/jpeg. Algunos navegadores pasan el blob
         // como application/octet-stream al FormData, lo que hace que el
         // multer del admin rechace el archivo con "Tipo no soportado".
         const file = new File([blob], 'frame.jpg', { type: 'image/jpeg' });
         const form = new FormData();
+        form.append('frameId', currentFrameId.toString());
+        form.append('frameTimestamp', frameTimestamp.toString());
+        if (playheadTime !== null) {
+          form.append('playheadTime', playheadTime.toString());
+        }
         form.append('frame', file);
+        
         let succeeded = false;
         await client
           .post(`/cameras/${encodeURIComponent(cameraId)}/frame`, form, {
             timeout: 35000,
           })
-          .then(() => {
+          .then((res) => {
             succeeded = true;
+            // Pintar el box DIRECTO desde la respuesta HTTP en vez de esperar
+            // el broadcast Socket.io `detection:live_frame`. El admin emite
+            // ese evento DENTRO de este mismo handler, asi que la respuesta
+            // que ya tenemos aqui llega ANTES que el rebote por el broker
+            // socket.io (un round-trip extra medido en decenas de ms). El
+            // guard MIN_LIVE_FRAME_INTERVAL_MS (50ms) del store descarta el
+            // evento socket duplicado que llega despues. El socket sigue
+            // sirviendo a OTROS espectadores de la misma camara.
+            const lf = res?.data?.liveFrame;
+            if (lf?.cameraId) {
+              const rtt = Date.now() - frameTimestamp;
+              if (rtt > 350) {
+                console.warn(`[frame-upload] Frame descartado por tardío (RTT: ${rtt}ms)`);
+                return;
+              }
+              useDetectionStore.getState().setLiveFrame(lf.cameraId, lf);
+            }
           })
           .catch((err) => {
             const status = err?.response?.status;
             // 429 = throttle del admin (transitorio por jitter): NO entra al
-            //        backoff exponencial — con margen de solo 50ms entre el
-            //        intervalo (150ms) y el throttle (100ms), un 429 espurio
-            //        congelaria el stream 1s+. El siguiente tick a 150ms ya
-            //        cae fuera del throttle.
+            //        backoff exponencial — el intervalo (80ms) deja 35ms de
+            //        margen sobre el throttle (45ms); un 429 espurio solo
+            //        pierde un frame y el siguiente tick a 80ms ya cae fuera.
             // 404 = camara no existe (permanente): no reintentar agresivamente,
             //        pero seguimos con backoff suave para detectar creacion
             // 502/503 = admin no pudo hablar con pyimage: aplicar backoff

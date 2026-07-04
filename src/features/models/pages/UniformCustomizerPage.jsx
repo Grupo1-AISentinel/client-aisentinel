@@ -1,49 +1,126 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { OrbitControls } from '@react-three/drei';
-import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
+import { OrbitControls, Html } from '@react-three/drei';
+// Cambiamos el loader viejo de FBX por el de GLTF
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import * as THREE from 'three';
 
-const HUMAN_MODEL_PATH = '/three/human.fbx';
+// 1. DATA SOURCE (Asegúrate de poner las rutas exactas de tus archivos .glb)
+const UNIFORMES_DATA = [
+  {
+    id: "uniforme-1",
+    anio: "2026",
+    nombre: "Uniforme de Diario",
+    descripcion: "Este es el uniforme oficial de diario que se comenzo a utilizar a partir del año 2023.",
+    tipo: "Oficial",
+    modeloPath: "../../../../public/three/Uniforme1.glb"
+  },
+  {
+    id: "uniforme-2",
+    anio: "2010",
+    nombre: "Chumpa de Diario Clásica",
+    descripcion: "Diseño clásico azul marino con el logo retro institucional. Destaca por su alta durabilidad y comodidad para el uso diario en las aulas.",
+    tipo: "Uso Diario",
+    modeloPath: "../../../../public/three/Uniforme2.glb"
+  },
+  {
+    id: "uniforme-3",
+    anio: "2010",
+    nombre: "Chumpa de Diario Clásica",
+    descripcion: "Diseño clásico azul marino con el logo retro institucional. Destaca por su alta durabilidad y comodidad para el uso diario en las aulas.",
+    tipo: "Uso Diario",
+    modeloPath: "../../../../public/three/Uniforme3.glb"
+  },
+  {
+    id: "uniforme-4",
+    anio: "2010",
+    nombre: "Chumpa de Diario Clásica",
+    descripcion: "Diseño clásico azul marino con el logo retro institucional. Destaca por su alta durabilidad y comodidad para el uso diario en las aulas.",
+    tipo: "Uso Diario",
+    modeloPath: "../../../../public/three/Uniforme4.glb"
+  },
+  {
+    id: "uniforme-5",
+    anio: "2010",
+    nombre: "Chumpa de Diario Clásica",
+    descripcion: "Diseño clásico azul marino con el logo retro institucional. Destaca por su alta durabilidad y comodidad para el uso diario en las aulas.",
+    tipo: "Uso Diario",
+    modeloPath: "../../../../public/three/Uniforme5.glb"
+  },
+  {
+    id: "uniforme-6",
+    anio: "2010",
+    nombre: "Chumpa de Diario Clásica",
+    descripcion: "Diseño clásico azul marino con el logo retro institucional. Destaca por su alta durabilidad y comodidad para el uso diario en las aulas.",
+    tipo: "Uso Diario",
+    modeloPath: "../../../../public/three/Uniforme6.glb"
+  },
+  {
+    id: "uniforme-7",
+    anio: "2010",
+    nombre: "Chumpa de Diario Clásica",
+    descripcion: "Diseño clásico azul marino con el logo retro institucional. Destaca por su alta durabilidad y comodidad para el uso diario en las aulas.",
+    tipo: "Uso Diario",
+    modeloPath: "../../../../public/three/Uniforme7.glb"
+  }
+];
+
 const BASE_HEIGHT = 0.11;
 const BASE_RADIUS = 0.95;
 const PLATFORM_RADIUS = 0.82;
 
-const RotatingHuman = ({ onReady }) => {
+const VELOCIDAD_ROTACION = 0.6;
+
+// 2. VISOR DE MODELOS GLB OPTIMIZADO
+const RotatingModel = ({ modeloPath, onReady }) => {
   const [scene, setScene] = useState(null);
   const groupRef = useRef();
 
   useEffect(() => {
-    const loader = new FBXLoader();
+    let active = true;
+    const loader = new GLTFLoader();
+
     loader.load(
-      HUMAN_MODEL_PATH,
-      (fbx) => {
-        const box = new THREE.Box3().setFromObject(fbx);
+      modeloPath,
+      (gltf) => {
+        if (!active) return;
+
+        const model = gltf.scene;
+        const box = new THREE.Box3().setFromObject(model);
         const center = new THREE.Vector3();
         box.getCenter(center);
-        fbx.position.x = -center.x;
-        fbx.position.y = BASE_HEIGHT - box.min.y;
-        fbx.position.z = -center.z;
-        fbx.traverse((obj) => {
+
+        model.position.x = -center.x;
+        model.position.y = BASE_HEIGHT - box.min.y;
+        model.position.z = -center.z;
+
+        model.traverse((obj) => {
           if (obj.isMesh) {
             obj.castShadow = true;
             obj.receiveShadow = true;
-            if (obj.material) obj.material.envMapIntensity = 0.7;
+            if (obj.material) obj.material.envMapIntensity = 0.8;
           }
         });
-        setScene(fbx);
-        onReady?.(fbx);
+
+        setScene(model);
+        onReady?.();
       },
       undefined,
-      (err) => console.error('[Models] Error cargando human.fbx', err)
+      (err) => console.error('[Models 3D] Error cargando el archivo .glb:', err)
     );
-  }, [onReady]);
 
+    return () => {
+      active = false;
+      setScene(null);
+    };
+  }, [modeloPath]);
+
+  // 🚀 Aquí se aplica la nueva velocidad de rotación constante
   useFrame((_, delta) => {
     if (groupRef.current) {
-      groupRef.current.rotation.y += delta * 0.35;
+      groupRef.current.rotation.y += delta * VELOCIDAD_ROTACION;
     }
   });
 
@@ -55,8 +132,21 @@ const RotatingHuman = ({ onReady }) => {
   );
 };
 
-const Pedestal = () => (
+// 3. PEDESTAL CON EL AÑO FLOTANTE
+const Pedestal = ({ anio }) => (
   <group>
+    {/* El año se proyecta tridimensionalmente al frente del pedestal */}
+    <Html
+      position={[0, 0.052, BASE_RADIUS * 1.02]}
+      center
+      transform
+      distanceFactor={2.5}
+    >
+      <div className="bg-slate-950/95 text-yellow-400 border border-yellow-500/30 px-3 py-0.5 rounded-md font-black text-sm tracking-widest shadow-lg uppercase select-none backdrop-blur-xs">
+        {anio}
+      </div>
+    </Html>
+
     <mesh position={[0, 0.011, 0]} receiveShadow castShadow>
       <cylinderGeometry args={[BASE_RADIUS, BASE_RADIUS * 1.03, 0.022, 96]} />
       <meshStandardMaterial color="#141a28" metalness={0.75} roughness={0.3} />
@@ -132,15 +222,74 @@ const SceneCamera = () => {
   return null;
 };
 
-const UniformCustomizerPage = () => {
+// 4. COMPONENTE PRINCIPAL INTERACTIVO
+export const UniformCustomizerPage = () => {
+  const [index, setIndex] = useState(0);
   const [loading, setLoading] = useState(true);
-  const handleReady = () => setLoading(false);
+
+  const actual = UNIFORMES_DATA[index];
+
+  const siguiente = () => {
+    setLoading(true);
+    setIndex((prev) => (prev + 1) % UNIFORMES_DATA.length);
+  };
+
+  const anterior = () => {
+    setLoading(true);
+    setIndex((prev) => (prev - 1 + UNIFORMES_DATA.length) % UNIFORMES_DATA.length);
+  };
+
+  useEffect(() => {
+    const intervalo = setInterval(() => {
+      siguiente();
+    }, 11000);
+
+    return () => clearInterval(intervalo);
+  }, [index]);
 
   if (typeof document === 'undefined') return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-0 pointer-events-none">
-      <div className="absolute inset-0 pointer-events-auto">
+    <div className="fixed inset-0 z-0 bg-[#050b14] overflow-hidden flex">
+
+      {/* CAPA DE CAPAS DE INTERFAZ HTML (SUPERIOR Z-INDEX) */}
+      <div className="absolute inset-0 z-10 pointer-events-none flex flex-col justify-between p-10">
+
+        {/* 🚀 PANEL INFORMATIVO CORREGIDO (Bajado con top-28 y mt-2 para librar la barra superior) */}
+        <div className="absolute top-28 right-10 w-85 p-6 rounded-2xl bg-slate-900/50 backdrop-blur-md border border-yellow-500/20 shadow-2xl pointer-events-auto transition-all duration-500">
+          <span className="text-xs font-bold text-yellow-500 uppercase tracking-widest">Edición Histórica</span>
+          <h2 className="text-4xl font-black mt-1 text-yellow-400">{actual.anio}</h2>
+          <h3 className="text-lg font-bold mt-2 text-white">{actual.nombre}</h3>
+          <p className="text-sm text-gray-300 mt-3 leading-relaxed">{actual.descripcion}</p>
+
+          <div className="mt-5 pt-4 border-t border-gray-800/60 flex justify-between text-xs">
+            <div>
+              <span className="text-gray-500 block mb-0.5">Tipo:</span>
+              <span className="text-gray-200 font-medium">{actual.tipo}</span>
+            </div>
+            <div>
+              <span className="text-gray-500 block mb-0.5">Detalles:</span>
+              <span className="text-gray-200 font-medium">{actual.detalles}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* CONTROLES DEL CARRUSEL (Se mantienen abajo al centro) */}
+        <div className="mt-auto self-center flex items-center gap-6 bg-slate-900/70 px-6 py-3 rounded-full border border-yellow-500/20 backdrop-blur-sm shadow-xl pointer-events-auto">
+          <button onClick={anterior} className="text-gray-400 hover:text-yellow-400 transition-colors text-xl font-bold p-1 select-none">
+            &larr;
+          </button>
+          <span className="text-sm font-semibold tracking-widest text-yellow-500 select-none">
+            {index + 1} / {UNIFORMES_DATA.length}
+          </span>
+          <button onClick={siguiente} className="text-gray-400 hover:text-yellow-400 transition-colors text-xl font-bold p-1 select-none">
+            &rarr;
+          </button>
+        </div>
+      </div>
+
+      {/* LIENZO 3D CANVAS */}
+      <div className="absolute inset-0 z-0 pointer-events-auto">
         <Canvas
           shadows
           dpr={[1, 2]}
@@ -172,8 +321,10 @@ const UniformCustomizerPage = () => {
           <directionalLight position={[0, 2.5, -3.5]} intensity={0.45} color="#ffe8c4" />
 
           <ShadowCatcher />
-          <Pedestal />
-          <RotatingHuman onReady={handleReady} />
+          <Pedestal anio={actual.anio} />
+
+          {/* Renderizado dinámico usando el cargador GLB */}
+          <RotatingModel modeloPath={actual.modeloPath} onReady={() => setLoading(false)} />
 
           <OrbitControls
             target={[0, BASE_HEIGHT + 0.9, 0]}
@@ -190,11 +341,12 @@ const UniformCustomizerPage = () => {
         </Canvas>
       </div>
 
+      {/* COMPONENTE VISUAL DE CARGA */}
       {loading && (
-        <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
-          <div className="flex items-center gap-3 px-4 py-2 rounded-full bg-surface-container-high/80 backdrop-blur-sm border border-white/10">
-            <span className="w-2 h-2 rounded-full bg-amber-300 animate-pulse" />
-            <span className="font-label text-xs text-on-surface-variant">Cargando modelo...</span>
+        <div className="absolute inset-0 flex items-center justify-center z-20 bg-[#050b14]/40 backdrop-blur-xs pointer-events-none">
+          <div className="flex items-center gap-3 px-4 py-2 rounded-full bg-slate-900/80 border border-white/10">
+            <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
+            <span className="text-xs text-gray-300">Cargando modelo histórico...</span>
           </div>
         </div>
       )}

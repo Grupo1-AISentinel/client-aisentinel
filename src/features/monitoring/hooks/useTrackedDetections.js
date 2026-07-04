@@ -12,7 +12,7 @@ const getCameraTracks = (cameraId) => {
 };
 
 const faceToState = (faceBox) => {
-  if (!faceBox) return { x: 0.5, y: 0.5, w: 0.1, h: 0.1 };
+  if (!faceBox) return null;
   const x = faceBox.left;
   const y = faceBox.top;
   const w = faceBox.right - faceBox.left;
@@ -61,19 +61,10 @@ export const useTrackedDetections = (cameraId, liveFrame) => {
 
     if (!liveFrame || !Array.isArray(liveFrame.students) || liveFrame.students.length === 0) {
       for (const t of tracks.map.values()) {
-        const dt = Math.max(0, now - t.lastSeenMs);
-        if (dt < MAX_DT) {
-          t.x += t.vx * dt;
-          t.y += t.vy * dt;
-          t.w += t.vw * dt;
-          t.h += t.vh * dt;
-          // Mismo half-life que el projection loop principal (2500ms).
-          const decay = Math.exp((-dt * Math.LN2) / VELOCITY_HALFLIFE_MS);
-          t.vx *= decay;
-          t.vy *= decay;
-          t.vw *= decay;
-          t.vh *= decay;
-        }
+        t.vx = 0;
+        t.vy = 0;
+        t.vw = 0;
+        t.vh = 0;
         t.lastSeenMs = now;
       }
       return undefined;
@@ -89,6 +80,7 @@ export const useTrackedDetections = (cameraId, liveFrame) => {
     for (const student of liveFrame.students) {
       const cardId = student.studentCard ? `s-${student.studentCard}` : null;
       const measured = faceToState(student.faceBox);
+      if (!measured) continue;
 
       let track = cardId ? existingById.get(cardId) : null;
 
@@ -187,22 +179,10 @@ export const useTrackedDetections = (cameraId, liveFrame) => {
 
     for (const [id, t] of existingById) {
       if (unmatched.has(id)) {
-        const dt = Math.max(0, frameReceivedAt - t.lastSeenMs);
-        if (dt < MAX_DT) {
-          t.x += t.vx * dt;
-          t.y += t.vy * dt;
-          t.w += t.vw * dt;
-          t.h += t.vh * dt;
-          // Half-life exponencial: la velocidad decae a la mitad cada
-          // VELOCITY_HALFLIFE_MS. Con 2500ms, la velocidad persiste
-          // ~7 segundos antes de ser despreciable. Antes era 600ms
-          // (decay a 26% en 1 frame) lo que congelaba el bbox.
-          const decay = Math.exp((-dt * Math.LN2) / VELOCITY_HALFLIFE_MS);
-          t.vx *= decay;
-          t.vy *= decay;
-          t.vw *= decay;
-          t.vh *= decay;
-        }
+        t.vx = 0;
+        t.vy = 0;
+        t.vw = 0;
+        t.vh = 0;
         t.lastSeenMs = frameReceivedAt;
       }
     }
@@ -218,6 +198,7 @@ export const useTrackedDetections = (cameraId, liveFrame) => {
   const tracks = tracksByCamera.get(cameraId);
   if (!tracks) return [];
   // FIX: Date.now() (epoch) consistente con el useEffect y el store.
+  // eslint-disable-next-line
   const now = Date.now();
   const result = [];
   for (const track of tracks.map.values()) {

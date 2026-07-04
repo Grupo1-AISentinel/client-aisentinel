@@ -216,11 +216,7 @@ const CameraTile = ({
         </div>
 
         {liveFrame && liveVideoSize && (
-          <LiveBoundingBoxes
-            cameraId={camera.cameraId}
-            renderSize={renderSize}
-            videoSize={liveVideoSize}
-          />
+          <LiveBoundingBoxes cameraId={camera.cameraId} videoSize={liveVideoSize} />
         )}
 
         {detection && detectionVideoSize && (
