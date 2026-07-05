@@ -42,13 +42,12 @@ const Modal = ({ isOpen, onClose, title, description, size = 'md', children, foo
       <div
         ref={dialogRef}
         className={cn(
-          'modal-panel w-full rounded-2xl animate-slide-up',
-          'overflow-hidden',
+          'modal-panel w-full rounded-2xl animate-slide-up flex flex-col max-h-[90vh] overflow-hidden',
           sizeMap[size]
         )}
       >
         <header
-          className="flex items-start justify-between gap-4 p-5 border-b"
+          className="flex items-start justify-between gap-4 p-5 border-b shrink-0"
           style={{ borderColor: 'var(--color-modal-header-border)' }}
         >
           <div>
@@ -71,10 +70,10 @@ const Modal = ({ isOpen, onClose, title, description, size = 'md', children, foo
             <X className="w-5 h-5" />
           </button>
         </header>
-        <div className="p-5">{children}</div>
+        <div className="p-5 overflow-y-auto flex-1">{children}</div>
         {footer && (
           <footer
-            className="flex items-center justify-end gap-2 p-5 border-t"
+            className="flex items-center justify-end gap-2 p-5 border-t shrink-0"
             style={{ borderColor: 'var(--color-table-divider)' }}
           >
             {footer}
