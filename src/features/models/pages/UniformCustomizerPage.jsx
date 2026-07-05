@@ -2,66 +2,64 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, Html } from '@react-three/drei';
-// Cambiamos el loader viejo de FBX por el de GLTF
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import * as THREE from 'three';
 
-// 1. DATA SOURCE (Asegúrate de poner las rutas exactas de tus archivos .glb)
 const UNIFORMES_DATA = [
   {
     id: "uniforme-1",
-    anio: "2026",
-    nombre: "Uniforme de Diario",
-    descripcion: "Este es el uniforme oficial de diario que se comenzo a utilizar a partir del año 2023.",
+    anio: "2019",
+    nombre: "Promoción 26",
+    descripcion: "Esta prenda conmemorativa, correspondiente al año 2019, fue portada con orgullo por los integrantes de la vigésimo sexta promoción de Fundación Kinal, representando su esfuerzo, identidad y el inicio de su legado institucional.",
     tipo: "Oficial",
     modeloPath: "../../../../public/three/Uniforme1.glb"
   },
   {
     id: "uniforme-2",
-    anio: "2010",
-    nombre: "Chumpa de Diario Clásica",
-    descripcion: "Diseño clásico azul marino con el logo retro institucional. Destaca por su alta durabilidad y comodidad para el uso diario en las aulas.",
+    anio: "2023",
+    nombre: "Promoción 30",
+    descripcion: "Esta prenda conmemorativa, correspondiente al año 2023, fue portada con orgullo por los integrantes de la trigésima promoción de Fundación Kinal, representando su esfuerzo, identidad y el inicio de su legado institucional.",
     tipo: "Uso Diario",
     modeloPath: "../../../../public/three/Uniforme2.glb"
   },
   {
     id: "uniforme-3",
-    anio: "2010",
-    nombre: "Chumpa de Diario Clásica",
-    descripcion: "Diseño clásico azul marino con el logo retro institucional. Destaca por su alta durabilidad y comodidad para el uso diario en las aulas.",
+    anio: "2024",
+    nombre: "Promoción 31",
+    descripcion: "Esta prenda conmemorativa, correspondiente al año 2024, fue portada con orgullo por los integrantes de la trigésimo primera promoción de Fundación Kinal, representando su esfuerzo, identidad y el inicio de su legado institucional.",
     tipo: "Uso Diario",
     modeloPath: "../../../../public/three/Uniforme3.glb"
   },
   {
     id: "uniforme-4",
-    anio: "2010",
-    nombre: "Chumpa de Diario Clásica",
-    descripcion: "Diseño clásico azul marino con el logo retro institucional. Destaca por su alta durabilidad y comodidad para el uso diario en las aulas.",
+    anio: "2017",
+    nombre: "Promoción 25",
+    descripcion: "Esta prenda conmemorativa, correspondiente al año 2017, fue portada con orgullo por los integrantes de la vigésimo quinta promoción de Fundación Kinal, representando su esfuerzo, identidad y el inicio de su legado institucional.",
     tipo: "Uso Diario",
     modeloPath: "../../../../public/three/Uniforme4.glb"
   },
   {
     id: "uniforme-5",
-    anio: "2010",
-    nombre: "Chumpa de Diario Clásica",
-    descripcion: "Diseño clásico azul marino con el logo retro institucional. Destaca por su alta durabilidad y comodidad para el uso diario en las aulas.",
+    anio: "2025",
+    nombre: "Promoción 32",
+    descripcion: "Esta prenda conmemorativa, correspondiente al año 2025, fue portada con orgullo por los integrantes de la trigésimo segunda promoción de Fundación Kinal, representando su esfuerzo, identidad y el inicio de su legado institucional.",
     tipo: "Uso Diario",
     modeloPath: "../../../../public/three/Uniforme5.glb"
   },
   {
     id: "uniforme-6",
-    anio: "2010",
-    nombre: "Chumpa de Diario Clásica",
-    descripcion: "Diseño clásico azul marino con el logo retro institucional. Destaca por su alta durabilidad y comodidad para el uso diario en las aulas.",
+    anio: "2026",
+    nombre: "Promoción 33",
+    descripcion: "Esta prenda conmemorativa, correspondiente al año 2026, fue portada con orgullo por los integrantes de la trigésimo tercera promoción de Fundación Kinal, representando su esfuerzo, identidad y el inicio de su legado institucional.",
     tipo: "Uso Diario",
     modeloPath: "../../../../public/three/Uniforme6.glb"
   },
   {
     id: "uniforme-7",
-    anio: "2010",
+    anio: "2023",
     nombre: "Chumpa de Diario Clásica",
-    descripcion: "Diseño clásico azul marino con el logo retro institucional. Destaca por su alta durabilidad y comodidad para el uso diario en las aulas.",
+    descripcion: "Esta prenda institucional, correspondiente al uniforme de diario de Fundación Kinal, es portada con orgullo por los alumnos de tercer año de educación básica hasta sexto año de diversificado, representando los valores, la identidad y la excelencia académica que caracterizan a nuestra comunidad educativa en su día a día.",
     tipo: "Uso Diario",
     modeloPath: "../../../../public/three/Uniforme7.glb"
   }
@@ -73,7 +71,6 @@ const PLATFORM_RADIUS = 0.82;
 
 const VELOCIDAD_ROTACION = 0.6;
 
-// 2. VISOR DE MODELOS GLB OPTIMIZADO
 const RotatingModel = ({ modeloPath, onReady }) => {
   const [scene, setScene] = useState(null);
   const groupRef = useRef();

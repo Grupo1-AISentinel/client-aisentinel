@@ -137,11 +137,11 @@ const Topbar = ({ onOpenMobileMenu }) => {
               setNotifOpen(false);
               setUserOpen((v) => !v);
             }}
-            className="flex items-center gap-3 hover:opacity-90 rounded-full pr-2 transition-opacity"
+            className="flex items-center gap-3 rounded-full pr-2 text-on-surface hover:bg-surface-container-high/70 transition-colors"
             aria-label="Menú de usuario"
             aria-expanded={userOpen}
           >
-            <div className="w-10 h-10 rounded-full bg-amber-400/20 border border-amber-400/30 flex items-center justify-center text-amber-300 font-bold text-sm font-mono">
+            <div className="w-10 h-10 rounded-full bg-[var(--btn-primary-bg)] border border-[var(--btn-primary-border)] flex items-center justify-center text-[var(--btn-primary-text)] font-extrabold text-sm font-mono shadow-[var(--btn-primary-shadow)]">
               {(user?.name?.[0] || '').toUpperCase()}
               {(user?.surname?.[0] || '').toUpperCase() || 'U'}
             </div>
@@ -149,7 +149,7 @@ const Topbar = ({ onOpenMobileMenu }) => {
               <p className="text-sm font-semibold text-on-surface leading-none truncate max-w-[140px]">
                 {user?.name} {user?.surname}
               </p>
-              <p className="font-label text-[10px] text-amber-300/80 mt-0.5">
+              <p className="font-label text-[10px] text-secondary mt-0.5">
                 {ROLE_LABELS[role] || '—'}
               </p>
             </div>

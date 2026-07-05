@@ -89,7 +89,7 @@ const DocsLayout = ({ children }) => {
           >
             {results.length === 0 ? (
               <p className="text-[12.5px] text-on-surface-variant py-1">
-                Sin resultados para <span className="text-amber-300">"{deferred}"</span>
+                Sin resultados para <span className="text-secondary">"{deferred}"</span>
               </p>
             ) : (
               <div className="max-h-[260px] overflow-y-auto rounded-md border border-white/10 bg-black/40">

@@ -13,7 +13,6 @@ import {
   Brain,
   BrainCircuit,
   WifiOff,
-  Loader2,
 } from 'lucide-react';
 import PageHeader from '../../../shared/components/layout/PageHeader.jsx';
 import { Card, CardHeader, Badge, Button, Skeleton } from '../../../shared/components/ui/index.js';
@@ -189,8 +188,10 @@ const MonitoringPage = () => {
   }, []);
 
   useEffect(() => {
-    fetch();
-    fetchInspections();
+    const initialLoadTimer = window.setTimeout(() => {
+      fetch();
+      fetchInspections();
+    }, 0);
     // connect() es idempotente: devuelve el socket actual o lo crea.
     const sock = socketService.connect();
     if (!sock) return undefined;
@@ -208,6 +209,7 @@ const MonitoringPage = () => {
     socketService.on(SOCKET_EVENTS.CAMERA_STATUS, handleStatus);
 
     return () => {
+      window.clearTimeout(initialLoadTimer);
       socketService.off(SOCKET_EVENTS.CAMERA_STATUS, handleStatus);
     };
   }, [fetch, fetchInspections]);
@@ -352,8 +354,9 @@ const MonitoringPage = () => {
               onDismissDetection={removeDetection}
             />
 
+            {/* Eventos recientes - DESACTIVADO
             <Card glass className="p-0 overflow-hidden">
-              <div className="px-4 py-3 border-b border-white/10 flex justify-between items-center bg-surface-container/50">
+              <div className="px-4 py-3 border-b border-outline-soft flex justify-between items-center bg-surface-container/50">
                 <h3 className="font-display text-base text-on-surface flex items-center gap-2">
                   <List className="w-4 h-4 text-secondary" />
                   Eventos recientes
@@ -361,7 +364,7 @@ const MonitoringPage = () => {
                 <button
                   type="button"
                   onClick={() => navigate('/alerts')}
-                  className="text-secondary hover:text-secondary-fixed font-label text-[10px] flex items-center gap-1"
+                  className="text-secondary hover:text-secondary-fixed font-semibold text-xs flex items-center gap-1"
                 >
                   Ver Todo <ArrowRight className="w-3 h-3" />
                 </button>
@@ -369,7 +372,7 @@ const MonitoringPage = () => {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="sticky top-0 bg-surface-container z-10">
-                    <tr className="text-on-surface-variant font-label text-[10px] border-b border-white/5">
+                    <tr className="text-on-surface-variant font-label text-[10px] border-b border-outline-soft">
                       <th className="text-left p-2">Hora</th>
                       <th className="text-left p-2">ID</th>
                       <th className="text-left p-2">Evento</th>
@@ -398,7 +401,7 @@ const MonitoringPage = () => {
                         return (
                           <tr
                             key={`${entry.studentCard || 'unknown'}-${entry.lastDetection || entry.createdAt || i}`}
-                            className="border-b border-white/5 hover:bg-white/5 group"
+                            className="border-b border-outline-variant hover:bg-surface-container-high group"
                           >
                             <td className="p-2 text-on-surface-variant font-mono text-xs">
                               {entry.lastDetection || entry.createdAt
@@ -419,7 +422,7 @@ const MonitoringPage = () => {
                               )}
                             </td>
                             <td className="p-2">
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-400/10 text-amber-300 border border-amber-400/25 font-label text-[10px]">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-400/10 text-secondary border border-amber-400/25 font-label text-[10px]">
                                 <span className="w-1.5 h-1.5 rounded-full bg-secondary" />
                                 {reasonLabel}
                               </span>
@@ -437,7 +440,7 @@ const MonitoringPage = () => {
                                   }
                                   navigate(`/alerts/${encodeURIComponent(entry.studentCard)}`);
                                 }}
-                                className="opacity-0 group-hover:opacity-100 text-amber-300 p-1 rounded hover:bg-white/10"
+                                className="opacity-0 group-hover:opacity-100 text-secondary p-1 rounded hover:bg-surface-container-high"
                                 aria-label="Ver detalle"
                                 title="Ver detalle"
                               >
@@ -452,11 +455,13 @@ const MonitoringPage = () => {
                 </table>
               </div>
             </Card>
+            */}
           </div>
 
           <div className="lg:col-span-4 flex flex-col gap-5">
+            {/* Cumplimiento - DESACTIVADO
             <Card glass>
-              <h3 className="font-display text-base text-on-surface mb-4 border-b border-white/10 pb-3 flex items-center gap-2">
+              <h3 className="font-display text-base text-on-surface mb-4 border-b border-outline-soft pb-3 flex items-center gap-2">
                 <BarChart className="w-4 h-4 text-secondary" />
                 Cumplimiento
               </h3>
@@ -475,24 +480,24 @@ const MonitoringPage = () => {
                   color="warning"
                 />
               </div>
-              <div className="pt-4 mt-4 border-t border-white/10">
+              <div className="pt-4 mt-4 border-t border-outline-soft">
                 <span className="block font-label text-[10px] text-on-surface-variant mb-2 uppercase tracking-wider">
                   Resumen de cámaras
                 </span>
                 <div className="grid grid-cols-3 gap-2 text-center">
-                  <div className="bg-surface-container border border-white/5 rounded-md p-2">
+                  <div className="bg-surface-container border border-outline-soft rounded-md p-2">
                     <p className="font-display text-lg font-bold text-success-bright">
                       {onlineCount}
                     </p>
                     <p className="font-label text-[9px] text-on-surface-variant">En línea</p>
                   </div>
-                  <div className="bg-surface-container border border-white/5 rounded-md p-2">
+                  <div className="bg-surface-container border border-outline-soft rounded-md p-2">
                     <p className="font-display text-lg font-bold text-secondary">
                       {formatTime(new Date()).slice(0, 5)}
                     </p>
                     <p className="font-label text-[9px] text-on-surface-variant">Turno</p>
                   </div>
-                  <div className="bg-surface-container border border-white/5 rounded-md p-2">
+                  <div className="bg-surface-container border border-outline-soft rounded-md p-2">
                     <p className="font-display text-lg font-bold text-on-surface">
                       {stats.totalAlertsFeed}
                     </p>
@@ -516,6 +521,7 @@ const MonitoringPage = () => {
                 Exportar turno
               </Button>
             </Card>
+            */}
 
             <Card glass>
               <CardHeader title="Cámaras" description="Conexión activa" />
