@@ -22,3 +22,16 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.err.log
+*.out.log
+*.log
+
+# Lockfile backups numerados (algunos editores los generan)
+pnpm-lock.yaml.*
