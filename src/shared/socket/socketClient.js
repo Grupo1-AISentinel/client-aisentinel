@@ -34,7 +34,14 @@ class SocketService {
     this.connecting = true;
     this.socket = io(url, {
       transports: ['websocket', 'polling'],
-      auth: { token },
+      // auth como FUNCION: socket.io-client la invoca antes de CADA intento
+      // de (re)conexion, asi que cada reconexion usa el token MAS RECIENTE de
+      // localStorage. Con `auth: { token }` estatico, el token quedaba
+      // congelado al primer connect; tras la renovacion silenciosa del JWT
+      // (heartbeat cada 60s) o un reinicio del admin, los reintentos usaban
+      // el token viejo -> "Token invalido" permanente y el canal de
+      // detection:live_frame / alertas quedaba muerto hasta recargar.
+      auth: (cb) => cb({ token: readAuth()?.token }),
       reconnection: true,
       reconnectionAttempts: Infinity,
       reconnectionDelay: 2000,
@@ -44,6 +51,12 @@ class SocketService {
     this.socket.on('connect', () => {
       console.log('[socket] connected:', this.socket.id);
       this.connecting = false;
+      this.socket.emit(SOCKET_EVENTS.SUBSCRIBE_CAMERAS);
+    });
+    // detection:alert se emite a rooms camera:<id>; si se registra una
+    // cámara nueva después de conectar, hay que re-suscribirse para
+    // unirse a su room (si no, sus alertas nunca llegan a este socket).
+    this.socket.on(SOCKET_EVENTS.CAMERAS_CHANGED, () => {
       this.socket.emit(SOCKET_EVENTS.SUBSCRIBE_CAMERAS);
     });
     this.socket.on('disconnect', (reason) => {

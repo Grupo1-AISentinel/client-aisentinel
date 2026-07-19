@@ -4,6 +4,11 @@ const MAX_PER_CAMERA = 6;
 const MAX_FEED = 12;
 const AUTO_DISMISS_MS = 8000;
 const MIN_LIVE_FRAME_INTERVAL_MS = 50;
+// Retencion de la ultima deteccion: un frame aislado donde el detector
+// pierde la cara (persona lejos, blur de movimiento) NO debe borrar los
+// boxes al instante — eso produce parpadeo. Los frames vacios dentro de
+// esta ventana se ignoran; si lo vacio persiste, el overlay se limpia.
+const HOLD_LAST_DETECTION_MS = 1000;
 
 const isValid = (detection) => detection && (detection._id || detection.id);
 
@@ -37,6 +42,7 @@ export const useDetectionStore = create((set, get) => ({
   detectionsByCamera: {},
   feed: [],
   liveDetections: {},
+  liveDetectionsHistory: {},
   pyimageConnected: true,
 
   addDetection: (detection) => {
@@ -113,24 +119,57 @@ export const useDetectionStore = create((set, get) => ({
   setLiveFrame: (cameraId, payload) => {
     if (!cameraId || !payload) return;
     const now = Date.now();
+
+    // Descartar si el frame es muy antiguo (RTT > 400ms) para evitar saltos o retrasos perceptibles
+    if (payload.frameTimestamp) {
+      const age = now - payload.frameTimestamp;
+      if (age > 400) {
+        console.warn(`[detectionStore] Descartando frame antiguo de la cámara ${cameraId}: ${age}ms de retraso`);
+        return;
+      }
+    }
+
     const prev = get().liveDetections[cameraId];
     if (prev && now - prev._receivedAt < MIN_LIVE_FRAME_INTERVAL_MS) return;
 
     const students = Array.isArray(payload.students) ? payload.students.map(normalizeStudent) : [];
+    // Anti-parpadeo: frame vacio reciente tras una deteccion valida se
+    // ignora (la transicion CSS sigue interpolando hacia la ultima
+    // posicion conocida). Ver HOLD_LAST_DETECTION_MS.
+    if (
+      students.length === 0 &&
+      prev?.students?.length > 0 &&
+      now - prev._receivedAt < HOLD_LAST_DETECTION_MS
+    ) {
+      return;
+    }
     const videoSize =
       payload.videoSize || students.find((s) => s.videoSize)?.videoSize || prev?.videoSize || null;
 
-    set((state) => ({
-      liveDetections: {
-        ...state.liveDetections,
-        [cameraId]: {
-          students,
-          videoSize,
-          timestamp: payload.timestamp || new Date(now).toISOString(),
-          _receivedAt: now,
+    const newFrame = {
+      students,
+      videoSize,
+      timestamp: payload.timestamp || new Date(now).toISOString(),
+      _receivedAt: now,
+      frameId: payload.frameId || null,
+      frameTimestamp: payload.frameTimestamp || null,
+      playheadTime: payload.playheadTime ?? null,
+    };
+
+    set((state) => {
+      const oldHistory = state.liveDetectionsHistory[cameraId] || [];
+      const newHistory = [newFrame, ...oldHistory].slice(0, 15);
+      return {
+        liveDetections: {
+          ...state.liveDetections,
+          [cameraId]: newFrame,
         },
-      },
-    }));
+        liveDetectionsHistory: {
+          ...state.liveDetectionsHistory,
+          [cameraId]: newHistory,
+        },
+      };
+    });
   },
 
   clearLiveDetection: (cameraId) => {
@@ -138,11 +177,13 @@ export const useDetectionStore = create((set, get) => ({
       if (!state.liveDetections[cameraId]) return state;
       const next = { ...state.liveDetections };
       delete next[cameraId];
-      return { liveDetections: next };
+      const nextHist = { ...state.liveDetectionsHistory };
+      delete nextHist[cameraId];
+      return { liveDetections: next, liveDetectionsHistory: nextHist };
     });
   },
 
-  clearAllLiveDetections: () => set({ liveDetections: {} }),
+  clearAllLiveDetections: () => set({ liveDetections: {}, liveDetectionsHistory: {} }),
 
   setPyimageConnected: (connected) => set({ pyimageConnected: Boolean(connected) }),
 }));

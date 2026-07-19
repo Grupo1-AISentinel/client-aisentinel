@@ -12,7 +12,7 @@ const UserDropdown = ({ open, onClose }) => {
   const role = useAuthStore((s) => s.role);
   const clearAuth = useAuthStore((s) => s.logout);
   const mode = useThemeStore((s) => s.mode);
-  const toggleTheme = useThemeStore((s) => s.toggle);
+  const setMode = useThemeStore((s) => s.setMode);
   const panelRef = useRef(null);
 
   useEffect(() => {
@@ -54,80 +54,85 @@ const UserDropdown = ({ open, onClose }) => {
       ref={panelRef}
       role="dialog"
       aria-label="Menú de usuario"
-      className="absolute right-0 top-full mt-2 w-64 z-50 glass-panel-solid rounded-xl shadow-elevated border border-white/15 animate-slide-down overflow-hidden"
+      className="absolute right-0 top-full mt-2 w-72 z-50 rounded-lg border border-outline-soft bg-surface-container-lowest shadow-[0_20px_50px_-18px_rgba(0,0,0,0.55)] animate-slide-down overflow-hidden user-dropdown-card"
     >
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-white/10">
-        <div className="w-10 h-10 rounded-full bg-amber-400/20 border border-amber-400/30 flex items-center justify-center text-amber-300 font-bold text-sm font-mono">
+      <div className="flex items-center gap-3 px-4 py-4 border-b border-outline-soft bg-surface-container-low">
+        <div className="w-11 h-11 rounded-full bg-[var(--btn-primary-bg)] border border-[var(--btn-primary-border)] flex items-center justify-center text-[var(--btn-primary-text)] font-extrabold text-sm font-mono shadow-[var(--btn-primary-shadow)]">
           {initials}
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-on-surface truncate">{fullName}</p>
-          <p className="font-label text-[10px] text-amber-300/80 mt-0.5">{roleLabel}</p>
+          <p className="font-label text-[10px] text-secondary mt-0.5">{roleLabel}</p>
         </div>
       </div>
 
-      <div className="py-1">
+      <div className="p-2">
         <button
           type="button"
           onClick={() => {
             navigate('/profile');
             onClose?.();
           }}
-          className="w-full flex items-center gap-3 px-4 py-2 text-sm text-on-surface hover:bg-white/5 transition-colors text-left"
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm text-on-surface hover:bg-surface-container-high transition-colors text-left"
         >
-          <User className="w-4 h-4 text-on-surface-variant" />
-          Mi perfil
+          <span className="w-8 h-8 rounded-md bg-surface-container border border-outline-soft flex items-center justify-center">
+            <User className="w-4 h-4 text-secondary" />
+          </span>
+          <span className="font-medium">Mi perfil</span>
         </button>
 
-        <div className="px-4 py-2 flex items-center gap-3">
-          <span className="text-sm text-on-surface-variant flex-1">Tema</span>
-          <div
-            role="tablist"
-            aria-label="Tema"
-            className="flex rounded-md border border-white/10 overflow-hidden text-xs"
-          >
+        <div className="mt-2 rounded-md border border-outline-soft bg-surface-container-low p-3">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-sm font-semibold text-on-surface">Tema</span>
+            <span className="font-label text-[10px] text-on-surface-variant">
+              {mode === 'dark' ? 'Oscuro' : 'Claro'}
+            </span>
+          </div>
+          <div role="tablist" aria-label="Tema" className="grid grid-cols-2 gap-2 text-xs">
             <button
               type="button"
               role="tab"
               aria-selected={mode === 'dark'}
-              onClick={() => mode !== 'dark' && toggleTheme()}
+              onClick={() => setMode('dark')}
               className={cn(
-                'flex items-center gap-1 px-2.5 py-1 transition-colors',
+                'flex items-center justify-center gap-2 rounded-md border px-3 py-2 transition-all duration-200',
                 mode === 'dark'
-                  ? 'bg-amber-400 text-amber-900 font-bold'
-                  : 'text-on-surface-variant hover:bg-amber-400/5'
+                  ? 'btn-primary-style'
+                  : 'theme-tab-btn'
               )}
             >
-              <Moon className="w-3 h-3" />
+              <Moon className="w-4 h-4" />
               Oscuro
             </button>
             <button
               type="button"
               role="tab"
               aria-selected={mode === 'light'}
-              onClick={() => mode !== 'light' && toggleTheme()}
+              onClick={() => setMode('light')}
               className={cn(
-                'flex items-center gap-1 px-2.5 py-1 transition-colors',
+                'flex items-center justify-center gap-2 rounded-md border px-3 py-2 transition-all duration-200',
                 mode === 'light'
-                  ? 'bg-amber-400 text-amber-900 font-bold'
-                  : 'text-on-surface-variant hover:bg-amber-400/5'
+                  ? 'btn-primary-style'
+                  : 'theme-tab-btn'
               )}
             >
-              <Sun className="w-3 h-3" />
+              <Sun className="w-4 h-4" />
               Claro
             </button>
           </div>
         </div>
       </div>
 
-      <div className="border-t border-white/10 py-1">
+      <div className="border-t border-outline-soft p-2 bg-surface-container-low">
         <button
           type="button"
           onClick={handleLogout}
-          className="w-full flex items-center gap-3 px-4 py-2 text-sm text-error-bright hover:bg-error/10 transition-colors text-left"
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm text-error-bright hover:bg-error/10 transition-colors text-left"
         >
-          <LogOut className="w-4 h-4" />
-          Cerrar sesión
+          <span className="w-8 h-8 rounded-md bg-error/10 border border-error/20 flex items-center justify-center">
+            <LogOut className="w-4 h-4" />
+          </span>
+          <span className="font-semibold">Cerrar sesión</span>
         </button>
       </div>
     </div>

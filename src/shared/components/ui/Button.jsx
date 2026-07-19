@@ -2,17 +2,13 @@ import { forwardRef } from 'react';
 import { cn } from '../../utils/cn.js';
 import { Loader2 } from 'lucide-react';
 
-/* Variante principal: amarillo sólido con texto mostaza oscuro y glow generoso */
+/* Variante principal: tokens de tema para mantener contraste en claro y oscuro. */
 const variants = {
   primary: [
-    'bg-amber-400 text-amber-900 font-bold',
-    'border border-amber-300/70',
-    'shadow-[var(--btn-primary-shadow)]',
-    'hover:bg-amber-300 hover:border-amber-200',
-    'hover:shadow-[var(--btn-primary-shadow-hover)]',
-    'hover:-translate-y-px',
-    'active:translate-y-0 active:bg-amber-500',
+    'btn-primary-style',
     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+    'hover:-translate-y-px hover:shadow-[var(--btn-primary-shadow-hover)]',
+    'active:translate-y-0',
   ].join(' '),
   success:
     'bg-success-bright !text-on-primary font-bold hover:bg-success hover:shadow-[0_0_20px_rgba(74,222,128,0.4)] focus-visible:ring-2 focus-visible:ring-success-bright focus-visible:ring-offset-2 focus-visible:ring-offset-background',
@@ -27,10 +23,10 @@ const variants = {
   ].join(' '),
   secondary: [
     'border',
-    'bg-white/10 text-on-surface',
-    'border-white/15',
-    'hover:bg-white/15 hover:border-white/25',
-    'focus-visible:ring-2 focus-visible:ring-on-surface focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+    'bg-[var(--btn-secondary-bg)] text-[var(--btn-secondary-text)]',
+    'border-[var(--btn-secondary-border)]',
+    'hover:bg-[var(--btn-secondary-bg-hover)] hover:border-[var(--btn-secondary-border-hover)]',
+    'focus-visible:ring-2 focus-visible:ring-amber-300 focus-visible:ring-offset-2 focus-visible:ring-offset-background',
   ].join(' '),
   ghost: [
     'border border-transparent',
@@ -107,7 +103,7 @@ const Button = forwardRef(
         ) : (
           leftIcon && <span className="inline-flex items-center shrink-0">{leftIcon}</span>
         )}
-        <span className="font-label tracking-wide">{children}</span>
+        <span className="font-semibold tracking-normal leading-none">{children}</span>
         {!loading && rightIcon && (
           <span className="btn-arrow-icon inline-flex items-center shrink-0" aria-hidden>
             {rightIcon}

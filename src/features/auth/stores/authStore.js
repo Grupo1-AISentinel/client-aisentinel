@@ -96,6 +96,23 @@ export const useAuthStore = create((set, get) => ({
     });
   },
 
+  // Renovacion silenciosa de token (via heartbeat, cada 60s mientras la
+  // sesion esta activa). Solo actualiza token/expiresAt, preserva el resto
+  // del estado (user, role, coordinatorGrade) intacto.
+  renewToken: (token, expiresAt) => {
+    const current = get();
+    if (!token) return;
+    set({ token, expiresAt });
+    persist({
+      token,
+      user: current.user,
+      role: current.role,
+      expiresAt,
+      coordinatorGrade: current.coordinatorGrade,
+      isAuthenticated: current.isAuthenticated,
+    });
+  },
+
   setTwoFactorChallenge: (twoFAToken) => {
     set({
       requiresTwoFactor: true,

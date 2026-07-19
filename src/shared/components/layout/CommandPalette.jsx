@@ -281,7 +281,7 @@ const CommandPalette = ({ open, onClose }) => {
               ejecutar
             </span>
           </span>
-          <span className="text-amber-300">{ROLE_LABELS[role] || '—'}</span>
+          <span className="text-secondary">{ROLE_LABELS[role] || '—'}</span>
         </footer>
       </div>
     </div>

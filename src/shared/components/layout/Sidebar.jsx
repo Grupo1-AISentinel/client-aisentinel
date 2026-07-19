@@ -36,12 +36,14 @@ const buildItems = (role) => {
       icon: Camera,
       roles: [ROLES.ADMIN, ROLES.COORDINATOR],
     },
+    /* Asistencias - DESACTIVADO
     {
       to: '/attendance',
       label: 'Asistencias',
       icon: CalendarCheck,
       roles: [ROLES.ADMIN, ROLES.COORDINATOR],
     },
+    */
     {
       to: '/coordinators',
       label: 'Coordinadores',
@@ -54,48 +56,56 @@ const buildItems = (role) => {
       icon: Users,
       roles: [ROLES.ADMIN, ROLES.COORDINATOR],
     },
+    /* Uniformes - DESACTIVADO
     {
       to: '/uniforms',
       label: 'Uniformes',
       icon: Shirt,
       roles: [ROLES.ADMIN, ROLES.COORDINATOR],
     },
+    */
     {
       to: '/alerts',
       label: 'Alertas',
       icon: AlertTriangle,
       roles: [ROLES.ADMIN, ROLES.COORDINATOR],
     },
+    /* Bitácoras - DESACTIVADO
     {
       to: '/audits',
       label: 'Bitácoras',
       icon: History,
       roles: [ROLES.ADMIN],
     },
+    */
     {
       to: '/cameras',
       label: 'Cámaras',
       icon: Camera,
       roles: [ROLES.ADMIN],
     },
+    /* Test de detección - DESACTIVADO
     {
       to: '/admin/test-detection',
       label: 'Test de detección',
       icon: FlaskConical,
       roles: [ROLES.ADMIN],
     },
+    */
     {
       to: '/docs',
       label: 'Documentación',
       icon: BookOpen,
       roles: [ROLES.ADMIN],
     },
+    /* Inspecciones - DESACTIVADO
     {
       to: '/inspections',
       label: 'Inspecciones',
       icon: Scan,
       roles: [ROLES.ADMIN, ROLES.COORDINATOR],
     },
+    */
     {
       to: '/statistics',
       label: 'Estadísticas',
@@ -158,8 +168,8 @@ const SidebarContent = ({ onNavigate, items }) => (
                   cn(
                     'relative flex items-center gap-3 h-10 px-3.5 rounded-md text-sm transition-all duration-200 group',
                     isActive
-                      ? 'bg-amber-400 text-amber-800 font-extrabold shadow-[0_0_20px_rgba(245,197,58,0.35),inset_0_2px_4px_rgba(0,0,0,0.18)]'
-                      : 'text-on-surface-variant hover:bg-amber-400/10 hover:text-amber-300 hover:translate-x-0.5 font-label'
+                      ? 'bg-[var(--sidebar-active-bg)] text-[var(--sidebar-active-text)] font-extrabold shadow-[0_0_20px_rgba(245,197,58,0.28),inset_0_2px_4px_rgba(0,0,0,0.14)]'
+                      : 'text-[var(--sidebar-item-text)] hover:bg-[var(--sidebar-item-hover-bg)] hover:text-[var(--sidebar-item-hover-text)] hover:translate-x-0.5 font-semibold'
                   )
                 }
               >
@@ -171,8 +181,14 @@ const SidebarContent = ({ onNavigate, items }) => (
                         aria-hidden
                       />
                     )}
-                    <Icon className="w-4 h-4 flex-shrink-0" />
-                    <span className="font-label text-[11px] tracking-wide truncate">
+                    <Icon
+                      className="w-4 h-4 flex-shrink-0"
+                      style={{ color: isActive ? 'var(--sidebar-active-text)' : 'inherit' }}
+                    />
+                    <span
+                      className="text-[13px] font-semibold tracking-normal truncate"
+                      style={{ color: isActive ? 'var(--sidebar-active-text)' : 'inherit' }}
+                    >
                       {item.label}
                     </span>
                     {isActive && (

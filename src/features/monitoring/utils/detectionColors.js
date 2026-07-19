@@ -91,7 +91,10 @@ export const classifyStudent = (student) => {
 export const studentLabel = (student) => {
   if (!student) return 'Detectado';
   if (student.isUnknown) return 'Desconocido';
-  return student.studentName || student.studentCard || student.fullName || 'Detectado';
+  // Nombre + apellido: hay alumnos con el mismo nombre, el apellido los
+  // diferencia en el box del monitoreo. Si falta alguno, se usa el que haya.
+  const full = `${student.studentName || ''} ${student.studentSurname || ''}`.trim();
+  return full || student.studentCard || student.fullName || 'Detectado';
 };
 
 // Color del bbox de ROPA segun si la prenda es valida o no.
